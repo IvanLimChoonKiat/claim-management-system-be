@@ -34,6 +34,16 @@ dotnet test ClaimsManagement.sln --collect:"XPlat Code Coverage"
 
 Coverage report lands under `TestResults/<run-id>/coverage.cobertura.xml`. CI uploads it as a build artifact (see `.github/workflows/ci.yml`).
 
+## Functional verification
+
+`scripts/verify.ps1` (`scripts/verify.sh` cross-platform companion) is a separate layer from `dotnet test` — it builds Release, runs the test suite, then starts a real instance of the API against an isolated temp SQLite database and drives the actual REST lifecycle via `Invoke-RestMethod`/`curl`: dev-login, submit, retrieve, assign, a valid decision transition, and a rejected invalid transition (re-deciding an already-decided claim, asserting 409). `-WithKafka`/`--with-kafka` additionally checks the local broker is reachable; omitted by default so ordinary verification never requires Kafka.
+
+**Actually run, both modes:**
+```
+./scripts/verify.ps1            -> All checks passed. (10/10)
+./scripts/verify.ps1 -WithKafka -> All checks passed. (11/11, including live Kafka connectivity)
+```
+
 ## Test isolation
 
 Every integration/persistence test collection creates its own SQLite database (temp file or scoped in-memory connection) — never a shared file, never the real `claims.db`. Ordinary unit tests have no I/O at all.

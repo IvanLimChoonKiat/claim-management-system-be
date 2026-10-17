@@ -55,6 +55,10 @@ OpenAPI/Swagger UI available at the printed `https://localhost:xxxx/swagger` in 
 
 A `docker-compose.yml` is included for portability to a machine with Docker, but **it has not been exercised in this environment** — only the native-binary path above was actually verified. See `docs/ARCHITECTURE.md` for delivery guarantees, retry/idempotency, and the Kafka-unavailable behavior.
 
+## Running the frontend
+
+The Angular frontend lives in the sibling repo [`claim-management-system-fe`](https://github.com/IvanLimChoonKiat/claim-management-system-fe) — see that repo's README. It expects this API running at `http://localhost:5299`.
+
 ## Unit & integration tests
 
 ```bash

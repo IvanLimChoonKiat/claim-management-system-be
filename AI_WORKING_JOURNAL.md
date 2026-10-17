@@ -93,3 +93,45 @@ AdditionalInformationRequested  | A33133FB-... | 2026-10-17 06:51:28
 Real rows, real event IDs, real timestamps - 4 of the 5 lifecycle event types verified live end-to-end (producer → broker → consumer → idempotent `NotificationLog` write). `ClaimRejected` wasn't separately re-verified live (my own test script tried to reject a claim that was still in `InfoRequested` status - correctly got a 409, confirming the state machine still enforces transitions correctly even under Kafka load); its topic-mapping is covered by `KafkaEventPublisherTests`, and it shares 100% of the code path with the already-verified `ClaimApproved` branch in `Claim.Decide()`. `docker-compose.yml` remains unexercised in this environment (no Docker installed) - the native-broker path above is what was actually run and verified.
 
 **Next:** Minimal Angular frontend (Phase 6).
+
+---
+
+## 2026-10-17 — Phase 6: Angular frontend
+
+**AI actions:** Scaffolded Angular in `claim-management-system-fe` via `npx @angular/cli@19` — the newest CLI major requires a newer Node than this machine has (22.18.0; needs 22.22.3+), so pinned to 19, the most recent compatible version (brief: "Angular, any version"). Moving the scaffold's output from `ng new`'s required subdirectory up to the repo root via `cp -r` proved extremely slow through Git Bash's POSIX emulation over `node_modules`' tens of thousands of files; killed that approach and used native PowerShell `Move-Item` (a same-volume rename, not a byte copy) instead - seconds instead of (projected) many minutes.
+
+Built: `AuthService`/`ClaimsApiService` (typed HttpClient wrappers), a functional auth interceptor + route guard, and the claimant/officer feature components, sharing one `claim-detail` component that conditionally renders role-specific actions based on the logged-in user and the claim's current status - the answer to "how does the frontend serve two user types from one codebase" (see `claim-management-system-fe/CLAUDE.md`).
+
+**Bugs found and fixed (via `ng build` failing, then via live browser testing):**
+1. `@else if (claim(); as claim)` - Angular only allows the `as` binding on a primary `@if`, not `@else if` (`NG5002`). Restructured to `@else { @if (claim(); as claim) { ... } }`.
+2. `FormBuilder` injected via constructor parameter but referenced in a field initializer (`readonly form = this.fb.group(...)`) in three components - field initializers run before the constructor body assigns constructor-parameter properties, so `this.fb` was `undefined` (`TS2729`). Fixed with `private readonly fb = inject(FormBuilder)` as a field instead.
+
+**Verification - not just `ng build`:** Per the standing instruction to verify UI changes in a real browser, not just claim success from a build: started both the real backend (`dotnet run`, fresh SQLite db) and the real frontend (`ng serve`) locally, then drove the full golden path with Playwright against actual headless Chromium (no custom browser driver written - used the cached Chromium binary directly since `chromium-cli` wasn't installed in this environment). Script: claimant login → submit a Motor claim → officer login → assign from the unassigned queue → request additional information → claimant responds → officer approves with a settlement amount.
+
+**Result:** 8/9 scripted assertions passed, zero browser console errors throughout. The 1 "failure" (a `.count()` check for the claimant's pending-info-request form reading 0 right after navigation) was a test-script timing artifact, not a product bug - confirmed by the very next screenshot (`08-claimant-respond-form.png`) showing the form fully rendered with the correct request text, and by the following step (filling and submitting that same form) succeeding. Final screenshot (`11-approved.png`) shows the complete, correct status history: Submitted → Assigned → InfoRequested → Assigned → Approved, with real timestamps.
+
+**Human decision:** None required - implementation bugs caught and fixed within this session's own verification loop.
+
+**Next:** Final verification scripts (`verify.ps1`/`verify.sh`) and documentation close-out (Phase 7).
+
+---
+
+## 2026-10-17 — Phase 7: Final verification
+
+**AI actions:** Wrote `scripts/verify.ps1` (primary, matches this dev environment) and `scripts/verify.sh` (cross-platform companion) per the engineering brief's required checklist: environment prerequisites, restore, build, test, SQLite init, health check, submit/retrieve/assign over real REST, a valid transition, a rejected invalid transition, and an opt-in `-WithKafka`/`--with-kafka` broker-connectivity check that's off by default so ordinary verification never needs Kafka.
+
+**Verification (final, both modes actually run, not assumed):**
+```
+./scripts/verify.ps1             -> 10/10 checks passed
+./scripts/verify.ps1 -WithKafka  -> 11/11 checks passed (incl. live Kafka connectivity)
+```
+Both runs built Release, ran the full `dotnet test` suite, started a real API instance against a fresh temp SQLite database, and drove dev-login → submit → retrieve → assign → decide (valid) → re-decide (rejected, 409) over actual HTTP.
+
+**Repository state at this point:**
+- Backend (`claim-management-system-be`): 6 commits on `main`, all pushed, GitHub Actions CI green on every push so far.
+- Frontend (`claim-management-system-fe`): 2 commits on `main`, pushed, GitHub Actions CI green.
+- Local Kafka broker and both dev servers stopped and cleaned up (temp SQLite files removed) after verification — no leftover processes, no runtime databases committed.
+
+**Human decision:** User chose to push commits eagerly (after the first backend milestone) rather than batch them, and to continue through all phases without a mid-session review pause — both choices held for the rest of the session. No other architectural decisions required sign-off during Phases 5-7; bugs found were fixed within the same verification loop and logged here, not escalated.
+
+**Honest status at session end:** see README.md "Known limitations" (both repos) and `docs/ASSUMPTIONS.md` for the full deferred-scope list. Headline items not attempted: the operational dashboard (brief's "if time permits" item), a real transactional outbox for Kafka, any identity provider beyond the dev mock login.
