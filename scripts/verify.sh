@@ -107,6 +107,15 @@ INVALID_STATUS="$(curl -s -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/ap
     -d '{"outcome":"Rejected","reason":"Already decided"}')"
 check "Invalid transition on already-decided claim rejected with 409" "$([[ "$INVALID_STATUS" == "409" ]] && echo true || echo false)"
 
+echo -e "\n=== 12. Angular build verification ==="
+FE_ROOT="$(cd "$REPO_ROOT/.." && pwd)/claim-management-system-fe"
+if [[ -f "$FE_ROOT/angular.json" ]]; then
+    (cd "$FE_ROOT" && npx -y @angular/cli@19 build >/dev/null 2>&1)
+    check "ng build (claim-management-system-fe)" "$([[ $? -eq 0 ]] && echo true || echo false)"
+else
+    echo "  (skipped - claim-management-system-fe not found as a sibling directory at $FE_ROOT)"
+fi
+
 if [[ "$WITH_KAFKA" == "true" ]]; then
     echo -e "\n=== 13. Kafka connectivity ==="
     if (exec 3<>/dev/tcp/localhost/9092) 2>/dev/null; then

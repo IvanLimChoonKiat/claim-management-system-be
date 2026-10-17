@@ -145,6 +145,22 @@ try {
     }
     Write-Check "Invalid transition on already-decided claim rejected with 409" $invalidRejected
 
+    Write-Host "`n=== 12. Angular build verification ===" -ForegroundColor Cyan
+    $feRoot = Join-Path (Split-Path $repoRoot -Parent) "claim-management-system-fe"
+    if (Test-Path (Join-Path $feRoot "angular.json")) {
+        Push-Location $feRoot
+        try {
+            npx -y @angular/cli@19 build | Out-Null
+            Write-Check "ng build (claim-management-system-fe)" ($LASTEXITCODE -eq 0)
+        }
+        finally {
+            Pop-Location
+        }
+    }
+    else {
+        Write-Host "  (skipped - claim-management-system-fe not found as a sibling directory at $feRoot)" -ForegroundColor DarkGray
+    }
+
     if ($WithKafka) {
         Write-Host "`n=== 13. Kafka connectivity and event verification ===" -ForegroundColor Cyan
         try {
