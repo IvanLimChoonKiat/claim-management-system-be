@@ -1,0 +1,39 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# User-specific
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+*.swp
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Secrets
+appsettings.*.local.json
+*.local.json
+secrets.json
+
+# Logs
+logs/
+*.log
+
+# Test results / coverage
+TestResults/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
+
+# OS
+.DS_Store
+Thumbs.db
