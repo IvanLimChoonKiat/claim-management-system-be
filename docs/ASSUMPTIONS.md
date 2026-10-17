@@ -21,7 +21,7 @@ In scope: claim submission, claimant tracking + info-request response, officer q
 
 ## Deferred functionality (explicitly out of scope, not silently dropped)
 
-- Operational dashboard (outstanding liability / by-status / by-officer breakdowns) — only attempted if time remains after the MVP above is solid and verified.
+- Operational dashboard (outstanding liability / by-status / by-officer breakdowns) — not reached; time went to a solid, fully-verified backend + Kafka + core frontend flows instead, per the brief's own priority order.
 - Real identity provider / password-based auth.
 - Transactional outbox for Kafka publishing (documented trade-off instead).
 - File/photo attachments on claims.
