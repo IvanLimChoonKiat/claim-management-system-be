@@ -65,3 +65,31 @@ Real log of AI collaboration on this assessment. Not polished — kept current a
 **Verification (final):** `dotnet test ClaimsManagement.sln --collect:"XPlat Code Coverage"` → **54/54 passed, 0 failed, 0 skipped**. Coverage (via `reportgenerator`): **89.3% line / 68.6% branch / 92.6% method** overall; **Domain 89.5%, Application 90.7%** — both above the ~80% target on the layers carrying business rules. Full breakdown and known gaps (Kafka live-broker paths, a couple of unused repository query methods) documented honestly in `docs/TESTING.md`.
 
 **Next:** Kafka producer/consumer live verification against the local native broker (Phase 5).
+
+**Human decision:** User chose to push these 4 commits immediately (rather than batching with later phases) so GitHub Actions CI would run early, and to continue straight into Phase 5/6/7 without a review pause. Backend CI ran green on first push (`gh run list` confirmed `completed success`).
+
+---
+
+## 2026-10-17 — Phase 5: Kafka
+
+**AI actions:** Wrote `scripts/kafka-start.ps1` (sets `JAVA_HOME` to the Temurin 21 JDK, since this machine's default `java` is 1.8 and Kafka 4.x needs 17+; generates a resolved `server.properties` from a committed template; runs `kafka-storage format --standalone` once, idempotently; starts the broker). Ran it for real against the pre-installed native Kafka 4.3.1 at `C:\kafka` - broker came up listening on `localhost:9092`.
+
+Ran the API with `Kafka__Enabled=true` and drove the claim lifecycle via real HTTP calls.
+
+**Bug found and fixed:** The first live run showed `ClaimSubmitted` events being produced and consumed correctly, but `ClaimAssigned`/`ClaimApproved` events sat unconsumed for over 20 seconds even though `kafka-topics --list` confirmed their topics existed (auto-created on first produce). Root cause: Confluent.Kafka's (librdkafka's) default topic-metadata refresh interval is ~5 minutes - fine for topics that exist before a consumer subscribes, too slow for topics that get auto-created seconds *after* subscription, which is exactly this app's situation (the consumer subscribes to all 5 topics at startup, before any of them necessarily exist). Fixed by setting `TopicMetadataRefreshIntervalMs = 5000` on the consumer config, documented inline as a pragmatic dev-scope fix (production would pre-create topics rather than rely on broker auto-create).
+
+**Human decision:** None required - caught and fixed within this session's verification loop.
+
+**Verification (final):** Re-ran the full lifecycle (submit → assign → request-info) with Kafka enabled. Confirmed via the API's own structured logs (`Published X ... to topic Y partition Z offset N` followed by `Recorded notification for X`) and by querying `claims.db` directly with `sqlite3`:
+
+```
+ClaimAssigned                   | 2B38EFD2-... | 2026-10-17 06:51:01
+ClaimApproved                   | 2B38EFD2-... | 2026-10-17 06:51:01
+ClaimSubmitted                  | A33133FB-... | 2026-10-17 06:51:24
+ClaimAssigned                   | A33133FB-... | 2026-10-17 06:51:24
+AdditionalInformationRequested  | A33133FB-... | 2026-10-17 06:51:28
+```
+
+Real rows, real event IDs, real timestamps - 4 of the 5 lifecycle event types verified live end-to-end (producer → broker → consumer → idempotent `NotificationLog` write). `ClaimRejected` wasn't separately re-verified live (my own test script tried to reject a claim that was still in `InfoRequested` status - correctly got a 409, confirming the state machine still enforces transitions correctly even under Kafka load); its topic-mapping is covered by `KafkaEventPublisherTests`, and it shares 100% of the code path with the already-verified `ClaimApproved` branch in `Claim.Decide()`. `docker-compose.yml` remains unexercised in this environment (no Docker installed) - the native-broker path above is what was actually run and verified.
+
+**Next:** Minimal Angular frontend (Phase 6).

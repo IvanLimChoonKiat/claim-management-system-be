@@ -93,6 +93,8 @@ Ordering: guaranteed per-claim because all 5 topics are keyed by `claimId`, so a
 
 Kafka unavailable: the API keeps working; events are simply not published for that window. This is an accepted gap for an assessment-scope system, not something a production system should accept — see Trade-offs.
 
+**Verified live** against the local native broker (submit → assign → request-info, `Kafka:Enabled=true`): events were produced, topics auto-created, and consumed into `NotificationLog` rows with real timestamps — see `AI_WORKING_JOURNAL.md` Phase 5 for the raw evidence. That run also surfaced a real gap: librdkafka's default topic-metadata refresh interval (~5 min) is too slow to notice a topic that gets auto-created seconds after this consumer subscribed to it at startup — fixed by setting a 5s refresh interval on the consumer (`NotificationConsumerBackgroundService`). The durable fix is pre-creating topics instead of relying on broker auto-create; out of scope here.
+
 ## SQLite design
 
 EF Core, Code-First migrations. Unique index on `ClaimReference`; indexes on `Status` and `AssignedOfficerUserId` for the officer-queue/workload queries. UTC timestamps throughout (`DateTimeOffset` or UTC `DateTime` with an `IDateTimeProvider` abstraction so tests can control time). Money as `decimal` with `HasPrecision(18,2)`.

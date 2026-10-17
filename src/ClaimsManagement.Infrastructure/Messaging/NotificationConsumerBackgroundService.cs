@@ -35,7 +35,14 @@ public sealed class NotificationConsumerBackgroundService(
             BootstrapServers = kafkaOptions.BootstrapServers,
             GroupId = kafkaOptions.ConsumerGroupId,
             AutoOffsetReset = AutoOffsetReset.Earliest,
-            EnableAutoCommit = true
+            EnableAutoCommit = true,
+            // librdkafka's default topic-metadata refresh is ~5 minutes, which is too slow when a
+            // topic is auto-created by a producer shortly after this consumer has already
+            // subscribed (observed during local verification: events on topics created seconds
+            // after startup sat unconsumed). Production would pre-create topics instead of relying
+            // on broker auto-create; for this assessment's scope, a short refresh interval is the
+            // pragmatic fix.
+            TopicMetadataRefreshIntervalMs = 5000
         }).Build();
 
         consumer.Subscribe(KafkaTopics.All);
