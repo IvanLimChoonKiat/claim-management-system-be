@@ -1,6 +1,6 @@
 # Testing
 
-_Initial strategy, written during Phase 2 before test code exists. Updated with actual results once Phase 4 (testing and quality) completes — see "Actual results" at the bottom._
+Strategy drafted in Phase 2 before test code existed; "Actual results" below reflects the real Phase 4 run.
 
 ## Strategy
 
@@ -8,8 +8,7 @@ _Initial strategy, written during Phase 2 before test code exists. Updated with 
 |---|---|---|
 | Domain | xUnit | Every valid and invalid claim state transition; claim reference generation; invariants |
 | Application | xUnit | Use-case services (submit, assign, request-info, respond, decide); ownership enforcement; concurrent-assignment race; validation |
-| Infrastructure/persistence | xUnit + isolated SQLite | EF Core mapping, constraints, migrations apply cleanly |
-| Api | xUnit + `WebApplicationFactory` | A handful of end-to-end HTTP tests for the critical paths (submit → assign → decide) |
+| Api + persistence | xUnit + `WebApplicationFactory` + isolated SQLite file per test class | End-to-end HTTP tests for the critical paths (submit → assign → request-info → respond → approve, plus negative cases) — this is also where EF Core mapping, constraints, and migrations get exercised against a real database; there is no separate repository-only test file (see "Known gaps") |
 | Kafka | Manual/opt-in | Event serialization round-trip tested without a broker; live produce/consume verified via `scripts/kafka-start.ps1` + `verify.ps1 -WithKafka`, not part of ordinary `dotnet test` |
 
 ## Critical scenarios (from the engineering brief)
@@ -43,10 +42,21 @@ Every integration/persistence test collection creates its own SQLite database (t
 
 ~80% line coverage on Domain + Application, which carry the business rules the brief asks to be tested. Coverage is a signal, not a goal in itself — branch coverage on the state machine and ownership checks matters more than the raw percentage.
 
-## Known gaps (updated honestly as of each phase)
+## Known gaps
 
-_Filled in once tests exist — see "Actual results" below for the real numbers, not a promise made in advance._
+- **Kafka production/consumption over a live broker is not covered by `dotnet test`.** `KafkaEventPublisherTests` exercises the event → topic/envelope mapping for all 5 lifecycle events with Kafka disabled (no network call), which is what ordinary unit tests can safely do. The actual produce/consume path against a running broker is verified separately via `scripts/verify.ps1 -WithKafka` (Phase 5), not by the automated test suite — consistent with "ordinary unit tests must not depend on Kafka."
+- **`NotificationConsumerBackgroundService`** (the Kafka consumer) has low direct coverage (~17%) for the same reason — its core logic (idempotent `NotificationLog` write) only really exercises against a live broker.
+- **`ClaimRepository`'s query methods** are covered where exercised through a real API call (`GetByIdAsync`, `GetUnassignedAsync`, `GetAssignedToOfficerAsync`); a couple of unused-by-any-current-endpoint methods (`GetByReferenceAsync`, `GetAllAsync`) are not directly tested — kept because they're small, obviously-correct LINQ, and exist for the dashboard stretch goal.
+- No dedicated outstanding-liability-calculation tests exist, because the operational dashboard (brief's "if time permits" item) was not reached — see `docs/ASSUMPTIONS.md`.
+- Concurrent assignment is tested at the Application layer with a fake `IUnitOfWork` that simulates `ConcurrentUpdateException` (`ClaimAssignmentServiceTests.AssignToOfficerAsync_OnConcurrentAssignmentConflict_ThrowsConcurrentUpdateException`), not via two real concurrent EF Core `SaveChanges` calls racing against SQLite — a true race-condition integration test was judged lower value than the time it would cost for this assessment's budget.
 
 ## Actual results
 
-_Not yet available — Phase 4 not started. This section will report tests executed/passed/failed/skipped and the real coverage percentage once that phase completes, including any untested critical areas._
+As of the Phase 4 (testing and quality) commit:
+
+- **54 tests executed, 54 passed, 0 failed, 0 skipped** (`dotnet test ClaimsManagement.sln`)
+- **Line coverage: 89.3%** overall (1514/1695 coverable lines) — **Domain 89.5%**, **Application 90.7%**, both above the ~80% target on the layers that carry business rules
+- **Branch coverage: 68.6%** (92/134) — lower than line coverage mainly because of untaken Kafka-disabled/error-handling branches noted above
+- **Method coverage: 92.6%** (251/271)
+- Coverage report: `TestResults/<run-id>/coverage.cobertura.xml` (Cobertura format, consumed by CI and by `reportgenerator` for the human-readable summary above)
+- Test breakdown: `Domain/ClaimTests.cs` (21 tests, every valid/invalid state transition), `Domain/ClaimReferenceGeneratorTests.cs` (2), `Application/*ServiceTests.cs` (18, covering submission, assignment incl. simulated concurrency conflict, information requests, decisions, ownership-scoped queries), `Infrastructure/KafkaEventPublisherTests.cs` (5, one per lifecycle event type), `Api/ClaimsApiTests.cs` (8, full HTTP lifecycle against a real isolated SQLite database via `WebApplicationFactory`)

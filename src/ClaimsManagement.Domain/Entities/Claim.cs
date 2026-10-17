@@ -139,8 +139,11 @@ public class Claim
 
     public InformationRequest RequestInformation(Guid officerUserId, string requestText, DateTime nowUtc)
     {
-        EnsureAssignedOfficer(officerUserId);
+        // State validity before identity: an unassigned claim has no "assigned officer" to match
+        // against, so checking ownership first would misreport a wrong-state call as "not
+        // authorized" (403) instead of "invalid for this claim's current status" (409).
         EnsureTransitionAllowed(ClaimStatus.InfoRequested);
+        EnsureAssignedOfficer(officerUserId);
 
         var request = InformationRequest.Create(Id, officerUserId, requestText, nowUtc);
         _informationRequests.Add(request);
@@ -152,8 +155,8 @@ public class Claim
 
     public void RespondToInformationRequest(Guid claimantUserId, Guid informationRequestId, string responseText, DateTime nowUtc)
     {
-        EnsureOwningClaimant(claimantUserId);
         EnsureTransitionAllowed(ClaimStatus.Assigned);
+        EnsureOwningClaimant(claimantUserId);
 
         var request = _informationRequests.FirstOrDefault(r => r.Id == informationRequestId)
             ?? throw new ClaimValidationException("Information request not found on this claim.");
@@ -164,10 +167,9 @@ public class Claim
 
     public ClaimDecision Decide(Guid officerUserId, ClaimDecisionOutcome outcome, decimal? settlementAmount, string reason, DateTime nowUtc)
     {
-        EnsureAssignedOfficer(officerUserId);
-
         var targetStatus = outcome == ClaimDecisionOutcome.Approved ? ClaimStatus.Approved : ClaimStatus.Rejected;
         EnsureTransitionAllowed(targetStatus);
+        EnsureAssignedOfficer(officerUserId);
 
         if (string.IsNullOrWhiteSpace(reason))
         {

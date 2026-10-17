@@ -47,3 +47,21 @@ Real log of AI collaboration on this assessment. Not polished — kept current a
 **Verification (final):** Full lifecycle verified via live HTTP calls against a real SQLite db: submit → assign → request-info → respond → approve (200s, correct status transitions, correct status history and decision recorded); re-approving an already-decided claim → 409; wrong role on a role-gated endpoint → 403; no token → 401; missing required field → 400 (DataAnnotations); motor claim missing vehicle registration → 400 (domain validation); claimant viewing another claimant's claim → 403 (ownership enforcement, independent of any frontend check). Kafka publisher correctly no-ops with a log line when `Kafka:Enabled=false` (the default - no broker running in this session yet).
 
 **Next:** Automated xUnit tests (domain, application, API) + coverage (Phase 4).
+
+---
+
+## 2026-10-17 — Phase 4: Testing and quality
+
+**AI actions:** Wrote 54 xUnit tests across Domain (state machine, every valid/invalid transition, reference generator), Application (use-case services via in-memory test doubles, including a simulated concurrent-assignment conflict), Infrastructure (Kafka event→topic mapping for all 5 event types with Kafka disabled), and Api (8 end-to-end HTTP tests via `WebApplicationFactory` against a real isolated-per-test SQLite file).
+
+**Bugs this surfaced (fixed, not architectural):**
+1. Two Application-layer tests asserted `Assert.Single(publisher.PublishedEvents)` but got 2-3 events — not a product bug, a test-setup bug: the test helpers created claims directly via `Claim.Submit()` (bypassing the real submission service) without clearing the resulting domain event, so later assertions double-counted events a real flow would already have dispatched-and-cleared in an earlier request. Fixed by clearing events in the test setup helpers.
+2. **A genuine Domain design issue**, caught by `RequestInformation_WhenClaimNotYetAssigned_ThrowsInvalidClaimTransitionException` failing with the wrong exception type: `Claim.RequestInformation`, `RespondToInformationRequest`, and `Decide` all checked *ownership* before *transition validity*. For a claim still in `Submitted` status (nobody assigned yet), this meant the ownership check fired first and returned "not authorized" (`ClaimOwnershipException` → 403) instead of "wrong status for this action" (`InvalidClaimTransitionException` → 409) — a real, if minor, incorrect-HTTP-status bug a real officer could have hit. Fixed by reordering all three methods to check transition validity first, ownership second. Re-verified all existing passing tests still passed after the reorder.
+3. HttpClient's JSON helpers in the test project don't inherit the server's `JsonStringEnumConverter` configuration — API tests failed to deserialize `role` until the test client was given its own matching `JsonSerializerOptions`.
+4. `WebApplicationFactory` test cleanup threw `IOException` deleting the per-test SQLite file because SQLite can hold a pooled connection open briefly after host shutdown. Fixed with `SqliteConnection.ClearAllPools()` before delete, with a swallowed-exception fallback since it's non-critical temp-file cleanup.
+
+**Human decision:** None required — all four were caught-and-fixed within this session's own verification loop, not judgment calls needing sign-off. Logged per "do not claim functionality works without verification" — item 2 in particular is the kind of bug that would have shipped unnoticed without writing the negative-case test.
+
+**Verification (final):** `dotnet test ClaimsManagement.sln --collect:"XPlat Code Coverage"` → **54/54 passed, 0 failed, 0 skipped**. Coverage (via `reportgenerator`): **89.3% line / 68.6% branch / 92.6% method** overall; **Domain 89.5%, Application 90.7%** — both above the ~80% target on the layers carrying business rules. Full breakdown and known gaps (Kafka live-broker paths, a couple of unused repository query methods) documented honestly in `docs/TESTING.md`.
+
+**Next:** Kafka producer/consumer live verification against the local native broker (Phase 5).
