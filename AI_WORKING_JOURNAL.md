@@ -134,4 +134,22 @@ Both runs built Release, ran the full `dotnet test` suite, started a real API in
 
 **Human decision:** User chose to push commits eagerly (after the first backend milestone) rather than batch them, and to continue through all phases without a mid-session review pause — both choices held for the rest of the session. No other architectural decisions required sign-off during Phases 5-7; bugs found were fixed within the same verification loop and logged here, not escalated.
 
-**Honest status at session end:** see README.md "Known limitations" (both repos) and `docs/ASSUMPTIONS.md` for the full deferred-scope list. Headline items not attempted: the operational dashboard (brief's "if time permits" item), a real transactional outbox for Kafka, any identity provider beyond the dev mock login.
+**Honest status at session end:** see README.md "Known limitations" (both repos) and `docs/ASSUMPTIONS.md` for the full deferred-scope list. Headline items not attempted: the operational dashboard, a real transactional outbox for Kafka, any identity provider beyond the dev mock login.
+
+---
+
+## 2026-10-17 — Correction: operational dashboard
+
+**What happened:** After reporting Phase 7 complete, the AI ran a self-initiated compliance audit against the PDF brief and the operating `.txt` file (user had asked for this verification) and reported the operational dashboard as a deliberately-deferred "if time permits" stretch item, citing `docs/ASSUMPTIONS.md`. The user then interrupted mid-commit and pointed out specific PDF-brief capabilities that were genuinely missing and not optional: "Officer sees the entire team's workload," "Team performance reporting," "Manager sees outstanding claims by status," "Manager sees real-time liability exposure."
+
+**Human decision: overrode the AI's scope call.** The AI had treated the PDF's "If time permits: Outstanding claims, Claims grouped by status, Officer workload, Estimated outstanding liability" line as license to skip this entirely without flagging it for explicit sign-off first - a real self-correction needed, not just a quick addition. The time budget was still healthy (~1h41m elapsed against a 2-3h target per the earlier audit), so there was no good reason to have deferred it unilaterally.
+
+**AI actions (after the correction):** Built `GET /api/dashboard/summary` (`DashboardService` + `DashboardController`): claims grouped by status, outstanding liability (sum of `EstimatedLiability` across claims still in `Submitted`/`Assigned`/`InfoRequested` - resolved claims no longer count as open exposure), and per-officer workload (`activeCount`/`approvedCount`/`rejectedCount`/`totalHandled`). Added the matching Angular `TeamDashboardComponent` + nav link.
+
+**Role-scoping decision (flagged, not silently assumed):** the PDF brief's capability list defines only Claimant and ClaimsOfficer; "Manager" appears solely in the background narrative, never as a login with its own capabilities. Rather than inventing a third role/auth path the brief never specified, the dashboard is visible to any ClaimsOfficer - satisfying "officer sees the entire team's workload" literally and serving the manager-narrative's need through the same view. Documented in `docs/ASSUMPTIONS.md` so this is a visible, defensible call in the walkthrough, not a silent assumption.
+
+**Bug found and fixed during this work:** `team-dashboard.component.ts` made the exact same Angular template mistake as `claim-detail.component.ts` in Phase 6 - `@else if (summary(); as summary)`, which Angular only allows on a primary `@if`. Caught immediately by `ng build` (same `NG5002` error as before) and fixed the same way.
+
+**Verification:** 6 new xUnit tests (`DashboardServiceTests` x4, `ClaimsApiTests` x2 - including a role-gating 403 check) - full suite now **60/60 passed**, coverage held at **89.4%** line / **69.1%** branch. `ng build` succeeds. Drove the feature live in a real browser (Playwright, same pattern as Phase 6): claimant submits a claim with `estimatedLiability=7777` → officer signs in, sees the new "Team Dashboard" nav link, assigns the claim, opens the dashboard → stat cards show "1" open claim and "7,777.00" outstanding liability exactly matching the submitted value, officer's row shows `active=1`, status chip shows `Assigned: 1`. 6/6 scripted checks passed, zero console errors, screenshot captured.
+
+Also fixed in this pass (caught by the same compliance audit, applied before the interruption): `scripts/verify.ps1`/`verify.sh` were missing the operating brief's explicit checklist item 12, "Angular build verification" - added an `ng build` step against the sibling frontend repo (skips gracefully if not present as a sibling directory). Re-verified: 11/11 checks pass.

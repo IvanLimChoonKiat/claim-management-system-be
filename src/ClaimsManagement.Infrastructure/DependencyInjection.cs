@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<InformationRequestService>();
         services.AddScoped<ClaimDecisionService>();
         services.AddScoped<UserService>();
+        services.AddScoped<DashboardService>();
 
         return services;
     }

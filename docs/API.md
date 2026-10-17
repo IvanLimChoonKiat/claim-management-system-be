@@ -72,6 +72,30 @@ Assigns the claim to the calling officer. `Submitted → Assigned`. `409` if not
 ### `GET /officers/me/claims` — workload *(ClaimsOfficer)*
 Returns `ClaimSummaryDto[]` for claims currently assigned to the calling officer.
 
+## Dashboard
+
+### `GET /dashboard/summary` — team-wide operational visibility *(ClaimsOfficer)*
+Open to any Claims Officer — the brief defines Claimant and ClaimsOfficer as the only two roles; "Manager" appears only in the background narrative, not as a distinct login, so this is not gated behind a separate role (see `docs/ASSUMPTIONS.md`).
+
+```json
+{
+  "totalOpenClaims": 7,
+  "outstandingLiability": 23500.00,
+  "claimsByStatus": [
+    { "status": "Submitted", "count": 2 },
+    { "status": "Assigned", "count": 3 },
+    { "status": "InfoRequested", "count": 2 },
+    { "status": "Approved", "count": 5 },
+    { "status": "Rejected", "count": 1 }
+  ],
+  "officerWorkloads": [
+    { "officerId": "guid", "officerName": "Bob Officer", "activeCount": 3, "approvedCount": 4, "rejectedCount": 1, "totalHandled": 5 }
+  ]
+}
+```
+
+`outstandingLiability` sums `estimatedLiability` across claims still in `Submitted`/`Assigned`/`InfoRequested` (not yet resolved) — an approved/rejected claim's estimated liability no longer counts as open exposure. `officerWorkloads.activeCount` is the officer's current open assignments ("team workload"); `approvedCount`/`rejectedCount`/`totalHandled` are the simplest honest read of "performance" the brief's scope supports (decision counts, not cycle-time/SLA metrics).
+
 ## Status codes
 
 | Code | Meaning |

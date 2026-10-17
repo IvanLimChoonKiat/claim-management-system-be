@@ -57,16 +57,15 @@ Every integration/persistence test collection creates its own SQLite database (t
 - **Kafka production/consumption over a live broker is not covered by `dotnet test`.** `KafkaEventPublisherTests` exercises the event → topic/envelope mapping for all 5 lifecycle events with Kafka disabled (no network call), which is what ordinary unit tests can safely do. The actual produce/consume path against a running broker is verified separately via `scripts/verify.ps1 -WithKafka` (Phase 5), not by the automated test suite — consistent with "ordinary unit tests must not depend on Kafka."
 - **`NotificationConsumerBackgroundService`** (the Kafka consumer) has low direct coverage (~17%) for the same reason — its core logic (idempotent `NotificationLog` write) only really exercises against a live broker.
 - **`ClaimRepository`'s query methods** are covered where exercised through a real API call (`GetByIdAsync`, `GetUnassignedAsync`, `GetAssignedToOfficerAsync`); a couple of unused-by-any-current-endpoint methods (`GetByReferenceAsync`, `GetAllAsync`) are not directly tested — kept because they're small, obviously-correct LINQ, and exist for the dashboard stretch goal.
-- No dedicated outstanding-liability-calculation tests exist, because the operational dashboard (brief's "if time permits" item) was not reached — see `docs/ASSUMPTIONS.md`.
 - Concurrent assignment is tested at the Application layer with a fake `IUnitOfWork` that simulates `ConcurrentUpdateException` (`ClaimAssignmentServiceTests.AssignToOfficerAsync_OnConcurrentAssignmentConflict_ThrowsConcurrentUpdateException`), not via two real concurrent EF Core `SaveChanges` calls racing against SQLite — a true race-condition integration test was judged lower value than the time it would cost for this assessment's budget.
+- Outstanding-liability aggregation is covered (`DashboardServiceTests`, `ClaimsApiTests.DashboardSummary_...`), but there's no dedicated test for liability precision/rounding at scale (hundreds of claims) — the summed `decimal` arithmetic is straightforward enough that this was judged low-value to test separately.
 
 ## Actual results
 
-As of the Phase 4 (testing and quality) commit:
+As of the dashboard addition (post-Phase-7):
 
-- **54 tests executed, 54 passed, 0 failed, 0 skipped** (`dotnet test ClaimsManagement.sln`)
-- **Line coverage: 89.3%** overall (1514/1695 coverable lines) — **Domain 89.5%**, **Application 90.7%**, both above the ~80% target on the layers that carry business rules
-- **Branch coverage: 68.6%** (92/134) — lower than line coverage mainly because of untaken Kafka-disabled/error-handling branches noted above
-- **Method coverage: 92.6%** (251/271)
+- **60 tests executed, 60 passed, 0 failed, 0 skipped** (`dotnet test ClaimsManagement.sln`)
+- **Line coverage: 89.4%** overall (1572/1757 coverable lines) — Domain and Application both still comfortably above the ~80% target
+- **Branch coverage: 69.1%** (94/136)
 - Coverage report: `TestResults/<run-id>/coverage.cobertura.xml` (Cobertura format, consumed by CI and by `reportgenerator` for the human-readable summary above)
-- Test breakdown: `Domain/ClaimTests.cs` (21 tests, every valid/invalid state transition), `Domain/ClaimReferenceGeneratorTests.cs` (2), `Application/*ServiceTests.cs` (18, covering submission, assignment incl. simulated concurrency conflict, information requests, decisions, ownership-scoped queries), `Infrastructure/KafkaEventPublisherTests.cs` (5, one per lifecycle event type), `Api/ClaimsApiTests.cs` (8, full HTTP lifecycle against a real isolated SQLite database via `WebApplicationFactory`)
+- Test breakdown: `Domain/ClaimTests.cs` (21), `Domain/ClaimReferenceGeneratorTests.cs` (2), `Application/*ServiceTests.cs` (22, incl. `DashboardServiceTests`), `Infrastructure/KafkaEventPublisherTests.cs` (5), `Api/ClaimsApiTests.cs` (10, incl. dashboard summary + role-gating)

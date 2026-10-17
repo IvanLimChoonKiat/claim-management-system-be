@@ -17,11 +17,14 @@
 
 ## MVP boundaries
 
-In scope: claim submission, claimant tracking + info-request response, officer queue/assign/assess/decide, status history, Kafka events for the 5 lifecycle transitions with one real consumer, SQLite persistence with migrations, mock auth with server-enforced ownership, xUnit coverage on Domain+Application, `verify.ps1` end-to-end smoke test, CI in both repos, minimal Angular UI for both roles.
+In scope: claim submission, claimant tracking + info-request response, officer queue/assign/assess/decide, status history, Kafka events for the 5 lifecycle transitions with one real consumer, SQLite persistence with migrations, mock auth with server-enforced ownership, xUnit coverage on Domain+Application, `verify.ps1` end-to-end smoke test, CI in both repos, Angular UI for both roles including a team-wide operational dashboard (claims by status, outstanding liability exposure, per-officer workload/performance).
+
+**Role scoping for the dashboard:** the brief's capability list defines only Claimant and ClaimsOfficer; "Manager" appears solely in the background narrative ("Managers have no real-time picture..."), not as a distinct login with its own capabilities. `GET /api/dashboard/summary` is therefore visible to any ClaimsOfficer rather than gated behind an invented third role — this satisfies "officer sees the entire team's workload" literally and serves the manager-narrative's need through the same view, without adding role/auth surface the brief didn't ask for.
+
+**"Performance" definition:** per-officer decision counts (active/approved/rejected/total handled) — the simplest honest read of "team performance reporting" this scope supports. Cycle-time/SLA metrics would need `UpdatedAtUtc` deltas per status transition, which the status-history table has but isn't aggregated here; a reasonable next increment, not attempted.
 
 ## Deferred functionality (explicitly out of scope, not silently dropped)
 
-- Operational dashboard (outstanding liability / by-status / by-officer breakdowns) — not reached; time went to a solid, fully-verified backend + Kafka + core frontend flows instead, per the brief's own priority order.
 - Real identity provider / password-based auth.
 - Transactional outbox for Kafka publishing (documented trade-off instead).
 - File/photo attachments on claims.

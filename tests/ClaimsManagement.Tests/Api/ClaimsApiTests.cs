@@ -147,6 +147,49 @@ public class ClaimsApiTests(ClaimsApiFactory factory) : IClassFixture<ClaimsApiF
     }
 
     [Fact]
+    public async Task DashboardSummary_AfterAssignmentAndDecision_ReflectsTeamWorkloadAndLiability()
+    {
+        var (claimantToken, _) = await LoginAsync($"claimant-{Guid.NewGuid():N}@example.com", UserRole.Claimant);
+        var (officerToken, officer) = await LoginAsync($"officer-{Guid.NewGuid():N}@example.com", UserRole.ClaimsOfficer);
+
+        // Class-fixture db is shared across all tests in this class, so the dashboard's global
+        // sums include other tests' data - baseline before/after and assert the delta, rather
+        // than an absolute value, to keep this test order-independent.
+        var before = await _client.SendAsync(Authorized(HttpMethod.Get, "/api/dashboard/summary", officerToken));
+        var baseline = (await before.Content.ReadFromJsonAsync<DashboardSummaryDto>(JsonOptions))!;
+
+        var openClaim = await SubmitClaimAsync(claimantToken);
+        await _client.SendAsync(Authorized(HttpMethod.Post, $"/api/claims/{openClaim.Id}/assign", officerToken));
+
+        var decidedClaim = await SubmitClaimAsync(claimantToken);
+        await _client.SendAsync(Authorized(HttpMethod.Post, $"/api/claims/{decidedClaim.Id}/assign", officerToken));
+        await _client.SendAsync(Authorized(
+            HttpMethod.Post, $"/api/claims/{decidedClaim.Id}/decision", officerToken,
+            new DecideClaimRequest(ClaimDecisionOutcome.Approved, 900m, "Valid claim")));
+
+        var response = await _client.SendAsync(Authorized(HttpMethod.Get, "/api/dashboard/summary", officerToken));
+        response.EnsureSuccessStatusCode();
+        var summary = await response.Content.ReadFromJsonAsync<DashboardSummaryDto>(JsonOptions);
+
+        var workload = summary!.OfficerWorkloads.Single(w => w.OfficerId == officer.Id);
+        Assert.Equal(1, workload.ActiveCount);
+        Assert.Equal(1, workload.ApprovedCount);
+        // Only the still-open claim's estimated liability (1000, from SubmitClaimAsync) should
+        // add to outstanding exposure - the approved claim is resolved, so it contributes 0.
+        Assert.Equal(1000m, summary.OutstandingLiability - baseline.OutstandingLiability);
+    }
+
+    [Fact]
+    public async Task DashboardSummary_AsClaimant_Returns403Forbidden()
+    {
+        var (claimantToken, _) = await LoginAsync($"claimant-{Guid.NewGuid():N}@example.com", UserRole.Claimant);
+
+        var response = await _client.SendAsync(Authorized(HttpMethod.Get, "/api/dashboard/summary", claimantToken));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetById_AsDifferentClaimant_Returns403Forbidden()
     {
         var (ownerToken, _) = await LoginAsync($"owner-{Guid.NewGuid():N}@example.com", UserRole.Claimant);
